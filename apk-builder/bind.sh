@@ -4,7 +4,7 @@
 #                   Lab-RATS                    #
 #                                               #
 #    Smali Surgery & APK Binding Script (Unix)  #
-#                v1.5.1 Hardened                #
+#                v1.6.0 Hardened                #
 #                                               #
 #             Developed by: K4N3CO              #
 #################################################

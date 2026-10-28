@@ -1,46 +1,87 @@
 <?xml version="1.0" encoding="utf-8"?>
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="360dp"
-    android:height="360dp"
-    android:viewportWidth="360"
-    android:viewportHeight="360">
+    android:width="400dp"
+    android:height="400dp"
+    android:viewportWidth="400"
+    android:viewportHeight="400">
 
-    <!-- Hexagons Matrix -->
+    <!-- Background Grid Lines -->
     <path
-        android:pathData="M60,10 L110,38.86 L110,95.58 L60,124.44 L10,95.58 L10,38.86 Z M180,10 L230,38.86 L230,95.58 L180,124.44 L130,95.58 L130,38.86 Z M300,10 L350,38.86 L350,95.58 L300,124.44 L250,95.58 L250,38.86 Z"
-        android:strokeColor="#1F00F2FF"
-        android:strokeWidth="0.6" />
+        android:pathData="M0 40h400M0 80h400M0 120h400M0 160h400M0 200h400M0 240h400M0 280h400M0 320h400M0 360h400 M40 0v400M80 0v400M120 0v400M160 0v400M200 0v400M240 0v400M280 0v400M320 0v400M360 0v400"
+        android:strokeColor="#00F2FF"
+        android:strokeWidth="0.3"
+        android:strokeAlpha="0.03" />
+
+    <!-- Center Chip Package -->
+    <path
+        android:pathData="M150 150 h100 v100 h-100 z"
+        android:fillColor="#030F14"
+        android:strokeColor="#00F2FF"
+        android:strokeWidth="1.2"
+        android:strokeAlpha="0.22" />
 
     <path
-        android:pathData="M60,130 L110,158.86 L110,215.58 L60,244.44 L10,215.58 L10,158.86 Z M180,130 L230,158.86 L230,215.58 L180,244.44 L130,215.58 L130,158.86 Z M300,130 L350,158.86 L350,215.58 L300,244.44 L250,215.58 L250,158.86 Z"
-        android:strokeColor="#1F00F2FF"
-        android:strokeWidth="0.6" />
+        android:pathData="M168 168 h64 v64 h-64 z"
+        android:fillColor="#0500F2FF"
+        android:strokeColor="#00F2FF"
+        android:strokeWidth="0.8"
+        android:strokeAlpha="0.18" />
 
     <path
-        android:pathData="M60,250 L110,278.86 L110,335.58 L60,364.44 L10,335.58 L10,278.86 Z M180,250 L230,278.86 L230,335.58 L180,244.44 L130,215.58 L130,278.86 Z M300,250 L350,278.86 L350,335.58 L300,264.44 L250,335.58 L250,278.86 Z"
-        android:strokeColor="#1F00F2FF"
-        android:strokeWidth="0.6" />
+        android:pathData="M160,160 A2,2 0 1,0 164,160 A2,2 0 1,0 160,160 Z"
+        android:fillColor="#5900F2FF" />
 
-    <!-- Circuit Traces Across Vertices -->
+    <!-- Center Chip Pins -->
     <path
-        android:pathData="M60,20 L60,40 M180,20 L180,40 M300,20 L300,40 M60,140 L60,160 M180,140 L180,160 M300,140 L300,160 M60,260 L60,280 M180,260 L180,280 M300,260 L300,280 M20,60 L40,60 M140,60 L160,60 M260,60 L280,60 M20,180 L40,180 M140,180 L160,180 M260,180 L280,180 M20,300 L40,300 M140,300 L160,300 M260,300 L280,300"
-        android:strokeColor="#2500F2FF"
-        android:strokeWidth="0.6" />
+        android:pathData="M165 150v-12M180 150v-12M195 150v-12M210 150v-12M225 150v-12 M165 250v12M180 250v12M195 250v12M210 250v12M225 250v12 M150 165h-12M150 180h-12M150 195h-12M150 210h-12M150 225h-12 M250 165h12M250 180h12M250 195h12M250 210h12M250 225h12"
+        android:strokeColor="#00F2FF"
+        android:strokeWidth="1.0"
+        android:strokeAlpha="0.25" />
 
-    <!-- Green Center Nodes -->
+    <!-- Corner Micro-ICs -->
     <path
-        android:pathData="M60,58 A2,2 0 1 0 60,62 A2,2 0 1 0 60,58 Z M180,58 A2,2 0 1 0 180,62 A2,2 0 1 0 180,58 Z M300,58 A2,2 0 1 0 300,62 A2,2 0 1 0 300,58 Z M60,178 A2,2 0 1 0 60,182 A2,2 0 1 0 60,178 Z M180,178 A2,2 0 1 0 180,182 A2,2 0 1 0 180,178 Z M300,178 A2,2 0 1 0 300,182 A2,2 0 1 0 300,178 Z M60,298 A2,2 0 1 0 60,302 A2,2 0 1 0 60,298 Z M180,298 A2,2 0 1 0 180,302 A2,2 0 1 0 180,298 Z M300,298 A2,2 0 1 0 300,302 A2,2 0 1 0 300,298 Z"
-        android:fillColor="#7039FF14" />
+        android:pathData="M30 30 h50 v50 h-50 z"
+        android:fillColor="#030F14"
+        android:strokeColor="#00F2FF"
+        android:strokeWidth="1.0"
+        android:strokeAlpha="0.18" />
 
-    <!-- Crosshair Nodes -->
     <path
-        android:pathData="M0,10 L15,10 M10,0 L10,15 M115,0 L115,15 M130,10 L115,10 M235,0 L235,15 M250,10 L235,10 M355,0 L355,15 M360,10 L345,10 M0,130 L15,130 M10,120 L10,135 M115,120 L115,135 M130,130 L115,130 M235,120 L235,135 M250,130 L235,130 M355,120 L355,135 M360,130 L345,130 M0,250 L15,250 M10,240 L10,255 M115,240 L115,255 M130,250 L115,250 M235,240 L235,255 M250,250 L235,250 M355,240 L355,255 M360,250 L345,250"
-        android:strokeColor="#2500F2FF"
-        android:strokeWidth="0.6" />
+        android:pathData="M40 30v-8M55 30v-8M70 30v-8 M40 80v8M55 80v8M70 80v8 M30 40h-8M30 55h-8M30 70h-8 M80 40h8M80 55h8M80 70h8"
+        android:strokeColor="#00F2FF"
+        android:strokeWidth="0.8"
+        android:strokeAlpha="0.2" />
 
-    <!-- Fine Grid Lines -->
     <path
-        android:pathData="M0,0 L360,0 M0,120 L360,120 M0,240 L360,240 M0,360 L360,360 M0,0 L0,360 M120,0 L120,360 M240,0 L240,360 M360,0 L360,360"
-        android:strokeColor="#1000F2FF"
-        android:strokeWidth="0.4" />
+        android:pathData="M320 320 h50 v50 h-50 z"
+        android:fillColor="#030F14"
+        android:strokeColor="#00F2FF"
+        android:strokeWidth="1.0"
+        android:strokeAlpha="0.18" />
+
+    <path
+        android:pathData="M330 320v-8M345 320v-8M360 320v-8 M330 370v8M345 370v8M360 370v8 M320 330h-8M320 345h-8M320 360h-8 M370 330h8M370 345h8M370 360h8"
+        android:strokeColor="#00F2FF"
+        android:strokeWidth="0.8"
+        android:strokeAlpha="0.2" />
+
+    <!-- Bus Routing Traces -->
+    <path
+        android:pathData="M165 138V80L135 50H0 M180 138V95L150 65H10 M195 138V70L225 40H400 M210 138V100L250 60H380 M165 262V320L125 360H0 M195 262V310L235 350H400 M210 262V335L260 385H390 M138 165H80L50 135V0 M138 195H70L30 235V400 M262 165H320L350 135V0 M262 195H330L370 235V400 M262 210H340L380 250V390"
+        android:strokeColor="#00F2FF"
+        android:strokeWidth="1.0"
+        android:strokeAlpha="0.14" />
+
+    <!-- Surface-Mount Components -->
+    <path
+        android:pathData="M125 46 h12 v8 h-12 z M235 36 h12 v8 h-12 z M340 125 h8 v12 h-8 z M44 225 h8 v12 h-8 z M115 354 h12 v8 h-12 z"
+        android:fillColor="#0D00F2FF"
+        android:strokeColor="#00F2FF"
+        android:strokeWidth="0.8"
+        android:strokeAlpha="0.22" />
+
+    <!-- Solder Nodes -->
+    <path
+        android:pathData="M133.5,50 A1.5,1.5 0 1,0 136.5,50 A1.5,1.5 0 1,0 133.5,50 Z M223.5,40 A1.5,1.5 0 1,0 226.5,40 A1.5,1.5 0 1,0 223.5,40 Z M348.5,135 A1.5,1.5 0 1,0 351.5,135 A1.5,1.5 0 1,0 348.5,135 Z M48.5,135 A1.5,1.5 0 1,0 51.5,135 A1.5,1.5 0 1,0 48.5,135 Z M123.5,360 A1.5,1.5 0 1,0 126.5,360 A1.5,1.5 0 1,0 123.5,360 Z M233.5,350 A1.5,1.5 0 1,0 236.5,350 A1.5,1.5 0 1,0 233.5,350 Z M368.5,235 A1.5,1.5 0 1,0 371.5,235 A1.5,1.5 0 1,0 368.5,235 Z M28.5,235 A1.5,1.5 0 1,0 31.5,235 A1.5,1.5 0 1,0 28.5,235 Z"
+        android:fillColor="#8000F2FF" />
 </vector>

